@@ -1,0 +1,12 @@
+sources:
+  - name: Wikipedia
+    url: https://en.wikipedia.org
+    wikipedia_category: Computer_science
+  - name: arXiv_cs
+    url: https://arxiv.org
+    rss_feed: http://export.arxiv.org/rss/cs
+
+# crawler settings
+max_articles: 1000
+request_timeout: 15
+user_agent: "infsearch-crawler/1.0"

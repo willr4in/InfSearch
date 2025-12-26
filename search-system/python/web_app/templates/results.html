@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Results</title></head>
+  <body>
+    <h1>Results for '{{ query }}'</h1>
+    {% if results %}
+      <ul>
+      {% for r in results %}
+        <li>{{ r }}</li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p>No results</p>
+    {% endif %}
+    <a href="/">Back</a>
+  </body>
+</html>
