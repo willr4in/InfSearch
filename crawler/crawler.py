@@ -11,7 +11,7 @@ from config import MONGO_URI, DB_NAME, ARTICLES_COLLECTION, STATE_COLLECTION
 from utils import clean_wikipedia_text
 
 class WikipediaCrawler:
-    def __init__(self, base_url, start_category, max_articles=15000):
+    def __init__(self, base_url, start_category, max_articles=30000):
         self.base_url = base_url
         self.start_category_url = urljoin(base_url, start_category)
         self.max_articles = max_articles
