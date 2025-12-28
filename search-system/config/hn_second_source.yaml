@@ -1,9 +1,0 @@
-sources:
-  - name: HackerNews
-    url: https://news.ycombinator.com
-    rss_feed: https://hnrss.org/newest
-
-# crawler settings
-max_articles: 200
-request_timeout: 15
-user_agent: "infsearch-crawler/1.0"

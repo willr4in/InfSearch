@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика Корпуса - Информационный Поиск{% endblock %}
+
+{% block content %}
+    <h2>Статистика Корпуса</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Метрика</th>
+                <th>Значение</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Всего документов в корпусе</td>
+                <td>{{ stats.total_docs }}</td>
+            </tr>
+            <tr>
+                <td>Среднее количество слов в статье</td>
+                <td>{{ "%.2f"|format(stats.avg_word_count) }}</td>
+            </tr>
+            <tr>
+                <td>Среднее количество символов в статье</td>
+                <td>{{ "%.2f"|format(stats.avg_char_count) }}</td>
+            </tr>
+        </tbody>
+    </table>
+{% endblock %}

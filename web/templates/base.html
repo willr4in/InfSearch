@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Информационный Поиск{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Информационный Поиск</h1>
+    </header>
+    <nav>
+        <a href="{{ url_for('search_page') }}">Булев Поиск</a>
+        <a href="{{ url_for('get_stats') }}">Статистика</a>
+        <a href="{{ url_for('get_zipf_table') }}">Анализ Ципфа</a>
+        <a href="{{ url_for('tests_dashboard') }}">Тесты</a>
+    </nav>
+    <div class="container">
+        <main>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>
+

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Булев Поиск - Информационный Поиск{% endblock %}
+
+{% block content %}
+    <h2>Булев Поиск</h2>
+    <div class="form-container">
+        <form method="post">
+            <input type="text" name="query" value="{{ query or '' }}" placeholder="Введите запрос (например, наука AND (технология OR исследование))">
+            <input type="submit" value="Найти">
+        </form>
+    </div>
+
+    {% if results is defined %}
+        <p class="results-info">Найдено {{ results|length }} статей за {{ execution_time }} сек.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Заголовок</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for article in results %}
+                <tr>
+                    <td>
+                        <a href="{{ article.url }}" target="_blank">{{ article.title }}</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td>Ничего не найдено.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

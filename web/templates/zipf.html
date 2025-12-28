@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Анализ по закону Ципфа - Информационный Поиск{% endblock %}
+
+{% block content %}
+    <h2>Анализ по закону Ципфа</h2>
+    <div class="button-group">
+        <a href="{{ url_for('get_zipf_plot', t=timestamp) }}" class="button" target="_blank">Показать график</a>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Ранг</th>
+                <th>Стем</th>
+                <th>Частота</th>
+                <th>Частота × Ранг</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in stats %}
+            <tr>
+                <td>{{ item.rank }}</td>
+                <td>{{ item.stem }}</td>
+                <td>{{ item.frequency }}</td>
+                <td>{{ "%.2f"|format(item.frequency_rank_product) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

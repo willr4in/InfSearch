@@ -1,4 +1,0 @@
-inverted_rows=314593
-size_inverted=47267840
-size_boolean=8372224
-elapsed_sec=450

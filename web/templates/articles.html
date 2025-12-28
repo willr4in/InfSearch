@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Статьи - Информационный Поиск{% endblock %}
+
+{% block content %}
+    <h2>Список статей</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Заголовок</th>
+                <th>URL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for article in articles %}
+            <tr>
+                <td>{{ article.article_id }}</td>
+                <td>{{ article.title }}</td>
+                <td><a href="{{ article.url }}" target="_blank">Перейти</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

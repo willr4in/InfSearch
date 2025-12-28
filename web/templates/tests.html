@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Панель управления тестами - Информационный Поиск{% endblock %}
+
+{% block content %}
+    <h2>Панель управления тестами</h2>
+    <div class="button-group">
+        <a href="{{ url_for('run_tests_endpoint') }}" class="button">Запустить все тесты</a>
+        <a href="{{ url_for('coverage_report') }}" class="button" target="_blank">Отчет о покрытии</a>
+    </div>
+
+    <h3>Последний отчет о тестировании</h3>
+    {% if report_exists %}
+        <iframe src="{{ url_for('view_test_report') }}" class="report-frame"></iframe>
+    {% else %}
+        <p>Отчет о тестировании не найден. Нажмите "Запустить все тесты", чтобы сгенерировать его.</p>
+    {% endif %}
+{% endblock %}
