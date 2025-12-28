@@ -1,102 +1,61 @@
-import pymongo
-from pymongo import MongoClient
 import sys
 import os
+from pymongo import MongoClient, UpdateOne, ReplaceOne
+from contextlib import contextmanager
 
-# Add root directory to path to import config
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from crawler.config import MONGO_URI, DB_NAME, ARTICLES_COLLECTION, STATE_COLLECTION
+from core.bridge import CoreBridge
+from crawler.config import MONGO_URI, DB_NAME, ARTICLES_COLLECTION
 
 ZIPF_COLLECTION = "zipf_stats"
 
-def calculate_zipf_with_mongodb():
-    """
-    Calculates Zipf's law statistics using the MongoDB Aggregation Framework.
-    This is the most efficient method.
-    """
+def calculate_zipf_with_cpp():
+    bridge = CoreBridge()
     client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
     articles_collection = db[ARTICLES_COLLECTION]
-    
-    print("Starting Zipf analysis using MongoDB aggregation...")
-
-    # Ensure a unique index exists on the target collection's merge key
     zipf_collection = db[ZIPF_COLLECTION]
-    zipf_collection.create_index([("stem", 1)], unique=True)
 
-    # The aggregation pipeline
-    pipeline = [
-        {"$unwind": "$stems"},
-        {"$group": {"_id": "$stems", "frequency": {"$sum": 1}}},
-        {"$sort": {"frequency": -1}},
-        {
-            "$setWindowFields": {
-                "sortBy": {"frequency": -1},
-                "output": {
-                    "rank": {"$rank": {}}
-                }
-            }
-        },
-        {"$project": {
-            "_id": 0,
-            "stem": "$_id",
-            "frequency": 1,
-            "rank": 1,
-            "frequency_rank_product": {"$multiply": ["$frequency", "$rank"]}
-        }},
-        {"$merge": {"into": ZIPF_COLLECTION, "on": "stem", "whenMatched": "replace", "whenNotMatched": "insert"}}
-    ]
+    print("Calculating Zipf stats using C++ core...")
 
-    # Execute the aggregation
-    articles_collection.aggregate(pipeline)
-    
-    total_stats = db[ZIPF_COLLECTION].count_documents({})
-    print(f"Aggregation complete. Results saved to '{ZIPF_COLLECTION}' collection.")
-    print(f"Total unique stems found: {total_stats}")
-    
-    client.close()
-
-def calculate_zipf_with_python():
-    """
-    Calculates Zipf's law statistics by processing data in Python.
-    Less efficient, used for testing and comparison.
-    """
-    client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    articles_collection = db[ARTICLES_COLLECTION]
-    
-    print("Starting Zipf analysis using Python...")
-    
-    from collections import Counter
-    
-    stem_counts = Counter()
-    cursor = articles_collection.find({}, {"stems": 1})
-    
-    for doc in cursor:
-        stem_counts.update(doc.get("stems", []))
+    with bridge.managed_freq_map() as freq_map_ptr:
+        cursor = articles_collection.find({"stems": {"$exists": True, "$ne": []}}, {"stems": 1})
         
-    # Sort by frequency
-    sorted_stems = sorted(stem_counts.items(), key=lambda item: item[1], reverse=True)
+        doc_count = 0
+        for doc in cursor:
+            stems = doc.get('stems', [])
+            if stems:
+                bridge.add_stems_to_freq_map(freq_map_ptr, stems)
+            doc_count += 1
+            if doc_count % 1000 == 0:
+                print(f"Processed {doc_count} documents for Zipf stats...")
+        
+        print("All documents processed. Converting C++ map to array...")
+        freq_list = bridge.get_freq_map_as_list(freq_map_ptr)
     
-    # Prepare documents for bulk insert
-    zipf_docs = []
-    for i, (stem, frequency) in enumerate(sorted_stems):
+    print(f"Received {len(freq_list)} unique stems from C++. Preparing for DB update.")
+
+    # --- Update MongoDB ---
+    zipf_collection.delete_many({})
+    operations = []
+    for i, item in enumerate(freq_list):
         rank = i + 1
-        zipf_docs.append({
-            "stem": stem,
-            "frequency": frequency,
-            "rank": rank,
-            "frequency_rank_product": frequency * rank
-        })
-        
-    # Save to MongoDB
-    zipf_collection = db[ZIPF_COLLECTION]
-    zipf_collection.delete_many({}) # Clear old stats
-    if zipf_docs:
-        zipf_collection.insert_many(zipf_docs)
-        
-    print(f"Python processing complete. Results saved to '{ZIPF_COLLECTION}' collection.")
-    print(f"Total unique stems found: {len(zipf_docs)}")
+        operations.append(ReplaceOne(
+            {"stem": item['stem']},
+            {
+                "stem": item['stem'],
+                "frequency": item['frequency'],
+                "rank": rank,
+                "frequency_rank_product": item['frequency'] * rank
+            },
+            upsert=True
+        ))
+    
+    if operations:
+        zipf_collection.bulk_write(operations)
 
+    print("Zipf stats successfully calculated and saved to MongoDB.")
     client.close()
 
+if __name__ == '__main__':
+    calculate_zipf_with_cpp()

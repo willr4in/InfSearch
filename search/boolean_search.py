@@ -1,112 +1,73 @@
-# search/boolean_search.py
 import sys
 import os
-from datetime import datetime
 import time
 from pymongo import MongoClient
 
-# Add root directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from core.bridge import CoreBridge
 from crawler.config import MONGO_URI, DB_NAME, ARTICLES_COLLECTION
-from search.query_parser import QueryParser
-from tokenizer.stemmer_py import cpp_stemmer
 
-BOOLEAN_INDEX_COLLECTION = "boolean_index"
-SEARCH_HISTORY_COLLECTION = "search_history"
+INDEX_FILE_PATH = "boolean_index.bin"
 
 class BooleanSearchEngine:
     def __init__(self):
-        self.client = MongoClient(MONGO_URI)
-        self.db = self.client[DB_NAME]
-        self.index_collection = self.db[BOOLEAN_INDEX_COLLECTION]
-        self.articles_collection = self.db[ARTICLES_COLLECTION]
-        self.history_collection = self.db[SEARCH_HISTORY_COLLECTION]
-        self.parser = QueryParser()
+        self.bridge = CoreBridge()
+        print("Loading C++ index from file...")
+        self.index_ptr = self.bridge.lib.load_index_from_file(INDEX_FILE_PATH.encode('utf-8'))
+        if not self.index_ptr:
+            raise IOError(f"Could not load index file: {INDEX_FILE_PATH}. Please build it first.")
+        
+        client = MongoClient(MONGO_URI)
+        self.articles_collection = client[DB_NAME][ARTICLES_COLLECTION]
+        print("Search engine initialized.")
 
-        # For NOT operations, we need the set of all document IDs
-        self._all_doc_ids = None
-
-    def _get_all_doc_ids(self):
-        """Lazily fetches and caches the set of all article_ids."""
-        if self._all_doc_ids is None:
-            print("Caching all document IDs for NOT operations...")
-            ids = self.articles_collection.distinct("article_id")
-            self._all_doc_ids = set(ids)
-        return self._all_doc_ids
-
-    def _get_doc_ids_for_term(self, term):
-        """Retrieves the list of document IDs for a single term from the index."""
-        result = self.index_collection.find_one({"term": term})
-        if result:
-            return set(result["doc_ids"])
-        return set()
+    def __del__(self):
+        # Destructor to free the C++ index memory when the object is destroyed
+        if hasattr(self, 'index_ptr') and self.index_ptr:
+            print("Destroying C++ index.")
+            self.bridge.lib.destroy_index(self.index_ptr)
 
     def search(self, query: str):
-        """
-        Performs a boolean search for the given query.
-        Returns a list of article documents.
-        """
-        start_time = time.time()
-        
-        try:
-            # 1. Parse the query into postfix (RPN)
-            postfix_query = self.parser.to_postfix(query)
-            
-            # 2. Evaluate the postfix query
-            results_stack = []
-            for token in postfix_query:
-                if token == "AND":
-                    op2 = results_stack.pop()
-                    op1 = results_stack.pop()
-                    results_stack.append(op1.intersection(op2))
-                elif token == "OR":
-                    op2 = results_stack.pop()
-                    op1 = results_stack.pop()
-                    results_stack.append(op1.union(op2))
-                elif token == "NOT":
-                    op = results_stack.pop()
-                    all_ids = self._get_all_doc_ids()
-                    results_stack.append(all_ids.difference(op))
-                else: # It's an operand (term)
-                    # Stem the term before looking it up in the index
-                    stemmed_token = cpp_stemmer.stem(token) if cpp_stemmer.is_loaded else token
-                    ids = self._get_doc_ids_for_term(stemmed_token)
-                    results_stack.append(ids)
-
-            if not results_stack:
-                final_ids = []
+        # Pre-process query: tokenize, stem, and format for C++ search
+        # (e.g., "наука И технология" -> "наук AND технолог")
+        tokens = self.bridge.tokenize(query)
+        processed_tokens = []
+        for token in tokens:
+            if token.upper() in ["AND", "OR", "NOT"]:
+                processed_tokens.append(token.upper())
             else:
-                final_ids = sorted(list(results_stack[0]))
+                processed_tokens.append(self.bridge.stem_word(token))
+        
+        processed_query = " ".join(processed_tokens)
+        print(f"Processed query: '{processed_query}'")
 
-            # 3. Fetch article titles for the resulting IDs
-            results_docs = list(self.articles_collection.find(
-                {"article_id": {"$in": final_ids}},
-                {"title": 1, "url": 1, "article_id": 1, "_id": 0}
-            ))
+        start_time = time.time()
+        doc_ids = self.bridge.search_index(self.index_ptr, processed_query)
+        end_time = time.time()
+        
+        execution_time = round(end_time - start_time, 4)
+        
+        results_docs = list(self.articles_collection.find(
+            {"article_id": {"$in": doc_ids}},
+            {"title": 1, "url": 1, "_id": 0}
+        ))
+        
+        return results_docs, execution_time
+
+if __name__ == '__main__':
+    engine = BooleanSearchEngine()
+    
+    while True:
+        try:
+            q = input("Enter search query (or 'exit'): ")
+            if q.lower() == 'exit':
+                break
             
-            # Reorder results to match the sorted list of IDs
-            id_to_doc = {doc['article_id']: doc for doc in results_docs}
-            ordered_results = [id_to_doc[id] for id in final_ids if id in id_to_doc]
+            results, ex_time = engine.search(q)
+            print(f"Found {len(results)} results in {ex_time}s:")
+            for doc in results:
+                print(f"  - {doc['title']} ({doc['url']})")
 
-        except (ValueError, IndexError) as e:
-            print(f"Error processing query: {e}")
-            ordered_results = []
-            final_ids = []
-
-        execution_time = time.time() - start_time
-        
-        # 4. Save search history
-        self.history_collection.insert_one({
-            "query": query,
-            "parsed_query": " ".join(postfix_query) if 'postfix_query' in locals() else "Parse Error",
-            "results_count": len(final_ids),
-            "execution_time": execution_time,
-            "timestamp": datetime.utcnow()
-        })
-        
-        return ordered_results, execution_time
-
-    def close(self):
-        self.client.close()
-
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
